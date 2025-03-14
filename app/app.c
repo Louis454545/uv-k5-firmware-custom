@@ -587,6 +587,14 @@ static void DualwatchAlternate(void)
 	#else
 		gDualWatchCountdown_10ms = dual_watch_count_toggle_10ms;
 	#endif
+	
+	// Si nous sommes en mode FM broadcast, nous réduisons le temps de surveillance VFO
+	// pour revenir plus rapidement à l'écoute FM
+	#ifdef ENABLE_FMRADIO
+		if (gFmRadioMode) {
+			gDualWatchCountdown_10ms = dual_watch_count_toggle_10ms / 2;  // Moitié du temps normal
+		}
+	#endif
 }
 
 static void CheckRadioInterrupts(void)
@@ -981,9 +989,6 @@ void APP_Update(void)
 #ifdef ENABLE_VOICE
 		&& gVoiceWriteIndex == 0
 #endif
-#ifdef ENABLE_FMRADIO
-		&& !gFmRadioMode
-#endif
 #ifdef ENABLE_DTMF_CALLING
 		&& gDTMF_CallState == DTMF_CALL_STATE_NONE
 #endif
@@ -998,6 +1003,21 @@ void APP_Update(void)
 		gScanPauseMode     = false;
 		gRxReceptionMode   = RX_MODE_NONE;
 		gScheduleDualWatch = false;
+		
+		// Si nous sommes en mode FM broadcast, revenir à l'écoute FM après avoir vérifié le VFO
+		#ifdef ENABLE_FMRADIO
+		if (gFmRadioMode) {
+			// Attendre un peu pour donner le temps de recevoir un signal sur le VFO
+			if (g_SquelchLost) {
+				// Si un signal est détecté, rester sur le VFO
+				// La surveillance FM sera reprise plus tard automatiquement
+			} else {
+				// Sinon, revenir immédiatement à l'écoute FM
+				FM_Start();
+				GUI_SelectNextDisplay(DISPLAY_FM);
+			}
+		}
+		#endif
 	}
 
 #ifdef ENABLE_FMRADIO

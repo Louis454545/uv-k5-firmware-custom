@@ -590,7 +590,8 @@ void FM_Play(void)
 
 void FM_Start(void)
 {
-	gDualWatchActive 		  = false;
+	// Ne pas désactiver le dual watch en mode FM broadcast
+	// gDualWatchActive 		  = false;
 	gFmRadioMode              = true;
 	gFM_ScanState             = FM_SCAN_OFF;
 	gFM_RestoreCountdown_10ms = 0;
@@ -602,6 +603,11 @@ void FM_Start(void)
 
 	gEnableSpeaker       = true;
 	gUpdateStatus        = true;
+	
+	// Jouer un bip court pour indiquer le retour au mode FM
+	if (gEeprom.DUAL_WATCH != DUAL_WATCH_OFF && gDualWatchActive) {
+		AUDIO_PlayBeep(BEEP_500HZ_60MS_OPTIONAL);
+	}
 }
 
 #endif
