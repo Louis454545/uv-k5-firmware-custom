@@ -1513,6 +1513,17 @@ void APP_TimeSlice500ms(void)
 		if (gFmRadioMode)           // 1of11
 			return;
 	}
+
+	// Handle RSSI refresh for FM radio
+	if (gFmRadioMode && gScreenToDisplay == DISPLAY_FM) {
+		if (gFmRssiRefreshCountdown_500ms > 0) {
+			gFmRssiRefreshCountdown_500ms--;
+		}
+		if (gFmRssiRefreshCountdown_500ms == 0) {
+			gFmRssiRefreshCountdown_500ms = 2; // Reset to 1 second (2 * 500ms)
+			gUpdateDisplay = true; // Force display refresh
+		}
+	}
 #endif
 
 	if (gBacklightCountdown_500ms > 0 && !gAskToSave && !gCssBackgroundScan

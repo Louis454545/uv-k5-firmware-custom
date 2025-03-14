@@ -39,6 +39,7 @@
 uint16_t          gFM_Channels[20];
 bool              gFmRadioMode;
 uint8_t           gFmRadioCountdown_500ms;
+uint8_t           gFmRssiRefreshCountdown_500ms = 2; // 2 * 500ms = 1 second refresh rate
 volatile uint16_t gFmPlayCountdown_10ms;
 volatile int8_t   gFM_ScanState;
 bool              gFM_AutoScan;
@@ -593,6 +594,7 @@ void FM_Start(void)
 	gFmRadioMode              = true;
 	gFM_ScanState             = FM_SCAN_OFF;
 	gFM_RestoreCountdown_10ms = 0;
+	gFmRssiRefreshCountdown_500ms = 2; // Initialize refresh timer
 
 	BK1080_Init(gEeprom.FM_FrequencyPlaying, gEeprom.FM_Band/*, gEeprom.FM_Space*/);
 
