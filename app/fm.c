@@ -606,7 +606,7 @@ void FM_Start(void)
 	
 	// Jouer un bip court pour indiquer le retour au mode FM
 	if (gEeprom.DUAL_WATCH != DUAL_WATCH_OFF && gDualWatchActive) {
-		AUDIO_PlayBeep(BEEP_500HZ_60MS_OPTIONAL);
+		AUDIO_PlayBeep(BEEP_1KHZ_60MS_OPTIONAL);
 	}
 }
 
