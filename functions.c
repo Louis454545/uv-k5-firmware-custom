@@ -102,8 +102,13 @@ void FUNCTION_Foreground(const FUNCTION_Type_t PreviousFunction)
 	}
 
 #if defined(ENABLE_FMRADIO)
-	if (gFmRadioMode)
+	if (gFmRadioMode) {
 		gFM_RestoreCountdown_10ms = fm_restore_countdown_10ms;
+	} else if (gFM_RestoreCountdown_10ms > 0 && !g_SquelchLost) {
+		// If we're temporarily out of FM mode for dual watch and no signal is detected,
+		// we can go back to FM mode immediately
+		gFM_RestoreCountdown_10ms = 0;
+	}
 #endif
 
 #ifdef ENABLE_DTMF_CALLING

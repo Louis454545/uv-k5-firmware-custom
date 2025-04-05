@@ -62,8 +62,8 @@ static void Key_FUNC(KEY_Code_t Key, uint8_t state);
 
 bool FM_CheckValidChannel(uint8_t Channel)
 {
-	return  Channel < ARRAY_SIZE(gFM_Channels) && 
-			gFM_Channels[Channel] >= BK1080_GetFreqLoLimit(gEeprom.FM_Band) && 
+	return  Channel < ARRAY_SIZE(gFM_Channels) &&
+			gFM_Channels[Channel] >= BK1080_GetFreqLoLimit(gEeprom.FM_Band) &&
 			gFM_Channels[Channel] < BK1080_GetFreqHiLimit(gEeprom.FM_Band);
 }
 
@@ -589,7 +589,6 @@ void FM_Play(void)
 
 void FM_Start(void)
 {
-//	gDualWatchActive 		  = false;		// Ne pas désactiver le dual watch en mode FM broadcast  @PBA v1.5
 	gFmRadioMode              = true;
 	gFM_ScanState             = FM_SCAN_OFF;
 	gFM_RestoreCountdown_10ms = 0;

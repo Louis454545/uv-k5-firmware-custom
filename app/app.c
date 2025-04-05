@@ -631,7 +631,7 @@ static void CheckRadioInterrupts(void)
 //		if (ctcss_shift > 0)
 //			g_CTCSS_Lost = true;
 
-		if (interrupts.dtmf5ToneFound) {	
+		if (interrupts.dtmf5ToneFound) {
 			const char c = DTMF_GetCharacter(BK4819_GetDTMF_5TONE_Code()); // save the RX'ed DTMF character
 			if (c != 0xff) {
 				if (gCurrentFunction != FUNCTION_TRANSMIT) {
@@ -657,7 +657,7 @@ static void CheckRadioInterrupts(void)
 						gDTMF_RX[gDTMF_RX_index]   = 0;
 						gDTMF_RX_timeout           = DTMF_RX_timeout_500ms;  // time till we delete it
 						gDTMF_RX_pending           = true;
-						
+
 						SYSTEM_DelayMs(3);//fix DTMF not reply@Yurisu
 						DTMF_HandleRequest();
 					}
@@ -865,8 +865,8 @@ void APP_Update(void)
 		gBlinkCounter++;
 
 		if(
-			(gSetting_set_tot == 3 && gEeprom.BACKLIGHT_TIME != 0 && gBlinkCounter > 74000) || 
-			(gSetting_set_tot == 3 && gEeprom.BACKLIGHT_TIME == 0 && gBlinkCounter > 79000) || 
+			(gSetting_set_tot == 3 && gEeprom.BACKLIGHT_TIME != 0 && gBlinkCounter > 74000) ||
+			(gSetting_set_tot == 3 && gEeprom.BACKLIGHT_TIME == 0 && gBlinkCounter > 79000) ||
 			(gSetting_set_tot != 3 && gBlinkCounter > 76000)
 			) // try to calibrate 10 times
 		{
@@ -942,9 +942,25 @@ void APP_Update(void)
 		HandleFunction();
 
 #ifdef ENABLE_FMRADIO
-//	if (gFmRadioCountdown_500ms > 0)
 	if (gFmRadioMode && gFmRadioCountdown_500ms > 0)    // 1of11
 		return;
+
+	// Handle dual watch in FM radio mode
+	if (gFmRadioMode && gEeprom.DUAL_WATCH != DUAL_WATCH_OFF && gScheduleDualWatch) {
+		// Temporarily switch to normal mode to check for signals
+		gFM_RestoreCountdown_10ms = fm_restore_countdown_10ms;
+		gFmRadioMode = false;
+		AUDIO_AudioPathOff();
+		gEnableSpeaker = false;
+		RADIO_SetupRegisters(true);
+		gScheduleDualWatch = false;
+	}
+
+	// Return to FM mode after checking for signals
+	if (!gFmRadioMode && gFM_RestoreCountdown_10ms == 0 && !g_SquelchLost) {
+		FM_Start();
+		GUI_SelectNextDisplay(DISPLAY_FM);
+	}
 #endif
 
 #ifdef ENABLE_VOICE
@@ -980,9 +996,6 @@ void APP_Update(void)
 		&& gCurrentFunction != FUNCTION_POWER_SAVE
 #ifdef ENABLE_VOICE
 		&& gVoiceWriteIndex == 0
-#endif
-#ifdef ENABLE_FMRADIO
-		&& !gFmRadioMode
 #endif
 #ifdef ENABLE_DTMF_CALLING
 		&& gDTMF_CallState == DTMF_CALL_STATE_NONE
@@ -1124,7 +1137,7 @@ static void CheckKeys(void)
 			}
 		}
 		else if ((GPIO_CheckBit(&GPIOC->DATA, GPIOC_PIN_PTT) || SerialConfigInProgress()) && gPttOnePushCounter == 1)
-		{	
+		{
 			// PTT released or serial comms config in progress
 			if (++gPttDebounceCounter >= 3 || SerialConfigInProgress())	    // 30ms
 			{	// stop transmitting
@@ -1132,7 +1145,7 @@ static void CheckKeys(void)
 			}
 		}
 		else if (!GPIO_CheckBit(&GPIOC->DATA, GPIOC_PIN_PTT) && !SerialConfigInProgress() && gPttOnePushCounter == 2)
-		{	// PTT pressed again			
+		{	// PTT pressed again
 			if (++gPttDebounceCounter >= 3 || SerialConfigInProgress())	    // 30ms
 			{	// stop transmitting
 				gPttOnePushCounter = 3;
@@ -1147,7 +1160,7 @@ static void CheckKeys(void)
 				if (gKeyReading1 != KEY_INVALID)
 					gPttWasReleased = true;
 				gPttOnePushCounter = 0;
-				ST7565_ContrastAndInv();			
+				ST7565_ContrastAndInv();
 			}
 		}
 		else
@@ -1184,7 +1197,7 @@ static void CheckKeys(void)
 			}
 		}
 		else
-			gPttDebounceCounter = 0;		
+			gPttDebounceCounter = 0;
 	}
 #else
 	if (gPttIsPressed)
@@ -1408,7 +1421,7 @@ void APP_TimeSlice10ms(void)
 
 #ifdef ENABLE_FMRADIO
 	if (gFmRadioMode && gFM_RestoreCountdown_10ms > 0) {
-		if (--gFM_RestoreCountdown_10ms == 0) {	
+		if (--gFM_RestoreCountdown_10ms == 0) {
 			FM_Start(); // switch back to FM radio mode
 			GUI_SelectNextDisplay(DISPLAY_FM);
 		}
@@ -1876,9 +1889,9 @@ static void ProcessKey(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 	}
 
 #ifdef ENABLE_FEAT_F4HWN // For F + SIDE1 or F + SIDE2
-	if (gWasFKeyPressed && (Key == KEY_PTT || Key == KEY_EXIT)) { 
+	if (gWasFKeyPressed && (Key == KEY_PTT || Key == KEY_EXIT)) {
 #else
-	if (gWasFKeyPressed && (Key == KEY_PTT || Key == KEY_EXIT || Key == KEY_SIDE1 || Key == KEY_SIDE2)) { 
+	if (gWasFKeyPressed && (Key == KEY_PTT || Key == KEY_EXIT || Key == KEY_SIDE1 || Key == KEY_SIDE2)) {
 #endif
 		// cancel the F-key
 		gWasFKeyPressed = false;
