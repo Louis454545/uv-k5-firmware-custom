@@ -1569,14 +1569,14 @@ void APP_TimeSlice500ms(void)
 		}
 	}
 
-	// regular display updates (once every 2 sec) - if need be
+	// regular display updates only when charging
 	if ((gBatteryCheckCounter & 3) == 0)
 	{
-		if (gChargingWithTypeC || gSetting_battery_text > 0)
-			gUpdateStatus = true;
 		#ifdef ENABLE_SHOW_CHARGE_LEVEL
-			if (gChargingWithTypeC)
+			if (gChargingWithTypeC) {
+				gUpdateStatus = true;
 				gUpdateDisplay = true;
+			}
 		#endif
 	}
 

@@ -31,6 +31,7 @@ extern bool              gLowBatteryBlink;
 extern bool              gLowBattery;
 extern bool              gLowBatteryConfirmed;
 extern uint16_t          gBatteryCheckCounter;
+extern uint8_t           gBatteryUpdateCounter;
 
 extern volatile uint16_t gPowerSave_10ms;
 

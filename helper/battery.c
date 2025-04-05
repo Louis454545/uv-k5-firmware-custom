@@ -37,6 +37,7 @@ bool              gLowBatteryBlink;
 bool              gLowBattery;
 bool              gLowBatteryConfirmed;
 uint16_t          gBatteryCheckCounter;
+uint8_t           gBatteryUpdateCounter;
 
 typedef enum {
 	BATTERY_LOW_INACTIVE,
@@ -167,6 +168,12 @@ void BATTERY_GetReadings(const bool bDisplayBatteryLevel)
 
 void BATTERY_TimeSlice500ms(void)
 {
+	// Increment battery update counter
+	if (++gBatteryUpdateCounter >= battery_update_counter_max) {
+		gBatteryUpdateCounter = 0;
+		gUpdateStatus = true;
+	}
+
 	if (!gLowBattery) {
 		return;
 	}

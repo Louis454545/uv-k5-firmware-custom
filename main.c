@@ -114,6 +114,7 @@ void Main(void)
 		BOARD_ADC_GetBatteryInfo(&gBatteryVoltages[i], &gBatteryCurrent);
 
 	BATTERY_GetReadings(false);
+	gBatteryUpdateCounter = 0;
 
 #ifdef ENABLE_AM_FIX
 	AM_fix_init();

@@ -38,6 +38,8 @@ const uint8_t     DTMF_txstop_countdown_500ms      =  3000 / 500;  // 6 seconds
 
 const uint8_t     key_input_timeout_500ms          =  8000 / 500;  // 8 seconds
 
+const uint8_t     battery_update_counter_max        =    60;       // 30 seconds (60 * 500ms)
+
 const uint16_t    key_repeat_delay_10ms            =   400 / 10;   // 400ms
 const uint16_t    key_repeat_10ms                  =    80 / 10;   // 80ms .. MUST be less than 'key_repeat_delay'
 const uint16_t    key_debounce_10ms                =    20 / 10;   // 20ms

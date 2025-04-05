@@ -98,6 +98,8 @@ extern const uint8_t         DTMF_txstop_countdown_500ms;
 
 extern const uint8_t         key_input_timeout_500ms;
 
+extern const uint8_t         battery_update_counter_max;
+
 extern const uint16_t        key_repeat_delay_10ms;
 extern const uint16_t        key_repeat_10ms;
 extern const uint16_t        key_debounce_10ms;
