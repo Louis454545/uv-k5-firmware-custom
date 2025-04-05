@@ -294,8 +294,6 @@ static void Key_DIGITS(KEY_Code_t Key, uint8_t state)
 					gEeprom.FM_FrequencyPlaying = gFM_Channels[Channel];
 					BK1080_SetFrequency(gEeprom.FM_FrequencyPlaying, gEeprom.FM_Band/*, gEeprom.FM_Space*/);
 					gRequestSaveFM = true;
-					// Pas de bip lors du changement de canal
-					gBeepToPlay = BEEP_NONE;
 					return;
 				}
 			}
@@ -352,8 +350,6 @@ static void Key_FUNC(KEY_Code_t Key, uint8_t state)
 				if (!FM_ConfigureChannelState()) {
 					BK1080_SetFrequency(gEeprom.FM_FrequencyPlaying, gEeprom.FM_Band/*, gEeprom.FM_Space*/);
 					gRequestSaveFM = true;
-					// Pas de bip lors du changement de mode
-					gBeepToPlay = BEEP_NONE;
 				}
 				else
 					gBeepToPlay = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
