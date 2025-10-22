@@ -580,7 +580,18 @@ static void DualwatchAlternate(void)
 		}
 	}
 
+	// Mute temporaire du BK1080 en mode FM pour éviter les clicks pendant la reconfiguration BK4819
+#ifdef ENABLE_FMRADIO
+	if (gFmRadioMode)
+		BK1080_Mute(true);
+#endif
+
 	RADIO_SetupRegisters(false);
+
+#ifdef ENABLE_FMRADIO
+	if (gFmRadioMode)
+		BK1080_Mute(false);
+#endif
 
 	#ifdef ENABLE_NOAA
 		gDualWatchCountdown_10ms = gIsNoaaMode ? dual_watch_count_noaa_10ms : dual_watch_count_toggle_10ms;
