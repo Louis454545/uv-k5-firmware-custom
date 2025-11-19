@@ -400,6 +400,9 @@ Skip:
 
 		case END_OF_RX_MODE_TTE:
 			if (gEeprom.TAIL_TONE_ELIMINATION) {
+#ifdef ENABLE_FMRADIO
+				if (!gFmRadioMode)
+#endif
 				AUDIO_AudioPathOff();
 
 				gTailNoteEliminationCountdown_10ms = 20;
