@@ -400,6 +400,9 @@ Skip:
 
 		case END_OF_RX_MODE_TTE:
 			if (gEeprom.TAIL_TONE_ELIMINATION) {
+#ifdef ENABLE_FMRADIO
+				if (!gFmRadioMode)
+#endif
 				AUDIO_AudioPathOff();
 
 				gTailNoteEliminationCountdown_10ms = 20;
@@ -1561,6 +1564,10 @@ void APP_TimeSlice500ms(void)
 			if (gChargingWithTypeC)
 				gUpdateDisplay = true;
 		#endif
+	}
+
+	if (gFmRadioMode) {
+		gUpdateDisplay = true;  // update FM display every 500ms for live RSSI @PBA v2.1
 	}
 
 	if (!gCssBackgroundScan && gScanStateDir == SCAN_OFF && !SCANNER_IsScanning()
