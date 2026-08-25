@@ -648,10 +648,21 @@ void RADIO_SelectVfos(void)
 void RADIO_SetupRegisters(bool switchToForeground)
 {
 	BK4819_FilterBandwidth_t Bandwidth = gRxVfo->CHANNEL_BANDWIDTH;
+	bool FmRadioMode = false;
+	bool PreserveAudio = false;
 
-	if (!gFmRadioMode) {  // Only turn off audio if not in FM broadcast mode @PBA v2.1
-	AUDIO_AudioPathOff();
-	gEnableSpeaker = false;
+#ifdef ENABLE_FMRADIO
+	// The BK1080 and BK4819 share the amplified speaker path.  During FM
+	// broadcast playback, keep the BK4819 AF mux and gain registers stable;
+	// rewriting them on every dual-watch hop couples a click into quiet audio.
+	// RF tuning, squelch and interrupts are still fully reconfigured below.
+	FmRadioMode = gFmRadioMode;
+	PreserveAudio = gFmRadioMode && gCurrentFunction == FUNCTION_FOREGROUND;
+#endif
+
+	if (!FmRadioMode) {  // Only turn off audio if not in FM broadcast mode @PBA v2.1
+		AUDIO_AudioPathOff();
+		gEnableSpeaker = false;
 	}
 
 	BK4819_ToggleGpioOut(BK4819_GPIO6_PIN2_GREEN, false);
@@ -706,7 +717,8 @@ void RADIO_SetupRegisters(bool switchToForeground)
 	BK4819_SetupSquelch(
 		gRxVfo->SquelchOpenRSSIThresh,    gRxVfo->SquelchCloseRSSIThresh,
 		gRxVfo->SquelchOpenNoiseThresh,   gRxVfo->SquelchCloseNoiseThresh,
-		gRxVfo->SquelchCloseGlitchThresh, gRxVfo->SquelchOpenGlitchThresh);
+		gRxVfo->SquelchCloseGlitchThresh, gRxVfo->SquelchOpenGlitchThresh,
+		!PreserveAudio);
 
 	BK4819_PickRXFilterPathBasedOnFrequency(Frequency);
 
@@ -715,11 +727,13 @@ void RADIO_SetupRegisters(bool switchToForeground)
 
 	// AF RX Gain and DAC
 	//BK4819_WriteRegister(BK4819_REG_48, 0xB3A8);  // 1011 00 111010 1000
-	BK4819_WriteRegister(BK4819_REG_48,
-		(11u << 12)                 |     // ??? .. 0 ~ 15, doesn't seem to make any difference
-		( 0u << 10)                 |     // AF Rx Gain-1
-		(gEeprom.VOLUME_GAIN << 4) |     // AF Rx Gain-2
-		(gEeprom.DAC_GAIN    << 0));     // AF DAC Gain (after Gain-1 and Gain-2)
+	if (!PreserveAudio) {
+		BK4819_WriteRegister(BK4819_REG_48,
+			(11u << 12)                 |     // ??? .. 0 ~ 15, doesn't seem to make any difference
+			( 0u << 10)                 |     // AF Rx Gain-1
+			(gEeprom.VOLUME_GAIN << 4) |     // AF Rx Gain-2
+			(gEeprom.DAC_GAIN    << 0));     // AF DAC Gain (after Gain-1 and Gain-2)
+	}
 
 
 	uint16_t InterruptMask = BK4819_REG_3F_SQUELCH_FOUND | BK4819_REG_3F_SQUELCH_LOST;

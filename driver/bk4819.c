@@ -699,7 +699,8 @@ void BK4819_SetupSquelch(
 		uint8_t SquelchOpenNoiseThresh,
 		uint8_t SquelchCloseNoiseThresh,
 		uint8_t SquelchCloseGlitchThresh,
-		uint8_t SquelchOpenGlitchThresh)
+		uint8_t SquelchOpenGlitchThresh,
+		bool MuteAudio)
 {
 	// REG_70
 	//
@@ -769,7 +770,8 @@ void BK4819_SetupSquelch(
 	//
 	BK4819_WriteRegister(BK4819_REG_78, ((uint16_t)SquelchOpenRSSIThresh   << 8) | SquelchCloseRSSIThresh);
 
-	BK4819_SetAF(BK4819_AF_MUTE);
+	if (MuteAudio)
+		BK4819_SetAF(BK4819_AF_MUTE);
 
 	BK4819_RX_TurnOn();
 }
