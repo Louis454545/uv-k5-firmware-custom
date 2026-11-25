@@ -88,6 +88,12 @@ void BK1080_Mute(bool Mute)
 	BK1080_WriteRegister(BK1080_REG_02_POWER_CONFIGURATION, Mute ? 0x4201 : 0x0201);
 }
 
+bool HOST_BK1080_AudioActive(void)
+{
+	return !GPIO_CheckBit(&GPIOB->DATA, GPIOB_PIN_BK1080) &&
+		!(regs[BK1080_REG_02_POWER_CONFIGURATION] & 0x4000);
+}
+
 void BK1080_SetFrequency(uint16_t frequency, uint8_t band)
 {
 	current_frequency = frequency;

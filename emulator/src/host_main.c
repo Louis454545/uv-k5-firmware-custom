@@ -13,6 +13,7 @@
 #include "bsp/dp32g030/gpio.h"
 #include "driver/backlight.h"
 #include "driver/bk4819-regs.h"
+#include "driver/bk4819.h"
 #include "driver/gpio.h"
 #include "driver/keyboard.h"
 #include "driver/st7565.h"
@@ -325,6 +326,7 @@ static bool save_screenshot(SDL_Renderer *ren, const char *path)
 
 static SDL_AudioDeviceID audio_device;
 static double tone_phase1, tone_phase2, rx_phase, rx_mod_phase, fm_phase, fm_lfo_phase;
+static double voice_phase1, voice_phase2, voice_phase3, voice_gate_phase;
 static uint32_t noise_state = 0x12345678;
 
 static double bk_tone_frequency(uint16_t encoded)
@@ -339,7 +341,11 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
 	int16_t *out = (int16_t *)stream;
 	int frames = len / (int)sizeof(*out);
 	const uint16_t tone_cfg = HOST_BK4819_ReadRegister(BK4819_REG_70);
-	const uint16_t irq = HOST_BK4819_ReadRegister(BK4819_REG_0C);
+	const uint16_t interrupt_status = HOST_BK4819_ReadRegister(BK4819_REG_02);
+	const uint16_t af_config = HOST_BK4819_ReadRegister(BK4819_REG_47);
+	const uint16_t tx_mute_config = HOST_BK4819_ReadRegister(BK4819_REG_50);
+	const uint16_t audio_gain_config = HOST_BK4819_ReadRegister(BK4819_REG_48);
+	const uint8_t rssi = (uint8_t)HOST_BK4819_ReadRegister(BK4819_REG_67);
 	const bool audio_path = GPIO_CheckBit(&GPIOC->DATA, GPIOC_PIN_AUDIO_PATH);
 	static int rx_audio = -1;
 	if (rx_audio < 0) {
@@ -351,10 +357,17 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
 	const double f2 = bk_tone_frequency(HOST_BK4819_ReadRegister(BK4819_REG_72));
 	const double g1 = ((tone_cfg >> BK4819_REG_70_SHIFT_TONE1_TUNING_GAIN) & 0x7f) / 127.0;
 	const double g2 = ((tone_cfg >> BK4819_REG_70_SHIFT_TONE2_TUNING_GAIN) & 0x7f) / 127.0;
-	const bool tone1 = audio_path && (tone_cfg & BK4819_REG_70_MASK_ENABLE_TONE1) && f1 > 20.0;
-	const bool tone2 = audio_path && (tone_cfg & BK4819_REG_70_MASK_ENABLE_TONE2) && f2 > 20.0;
-	const bool receiver_open = audio_path && rx_audio && (irq & (1u << BK4819_REG_3F_SHIFT_SQUELCH_FOUND));
-	const bool fm_radio_on = !GPIO_CheckBit(&GPIOB->DATA, GPIOB_PIN_BK1080);
+	const unsigned af_mode = (af_config >> 8) & 0x0f;
+	const bool af_muted = af_mode == BK4819_AF_MUTE;
+	const bool tx_muted = tx_mute_config & 0x8000;
+	const bool tone_path = audio_path && !af_muted && !tx_muted;
+	const bool tone1 = tone_path && (tone_cfg & BK4819_REG_70_MASK_ENABLE_TONE1) && f1 > 20.0;
+	const bool tone2 = tone_path && (tone_cfg & BK4819_REG_70_MASK_ENABLE_TONE2) && f2 > 20.0;
+	const bool receiver_open = audio_path && rx_audio && !af_muted && (interrupt_status & BK4819_REG_02_MASK_SQUELCH_FOUND);
+	const bool fm_radio_on = HOST_BK1080_AudioActive();
+	const double volume_gain = (double)((audio_gain_config >> 4) & 0x3f) / 63.0;
+	const double master_gain = 0.35 + volume_gain * 0.65;
+	const double signal_quality = rssi > 45 ? (rssi - 45) / 180.0 : 0.0;
 
 	for (int i = 0; i < frames; i++) {
 		tone_phase1 += f1 / AUDIO_RATE;
@@ -363,12 +376,20 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
 		rx_mod_phase += 3.7 / AUDIO_RATE;
 		fm_phase += 660.0 / AUDIO_RATE;
 		fm_lfo_phase += 0.55 / AUDIO_RATE;
+		voice_phase1 += 185.0 / AUDIO_RATE;
+		voice_phase2 += 355.0 / AUDIO_RATE;
+		voice_phase3 += 710.0 / AUDIO_RATE;
+		voice_gate_phase += 2.9 / AUDIO_RATE;
 		if (tone_phase1 >= 1.0) tone_phase1 -= floor(tone_phase1);
 		if (tone_phase2 >= 1.0) tone_phase2 -= floor(tone_phase2);
 		if (rx_phase >= 1.0) rx_phase -= floor(rx_phase);
 		if (rx_mod_phase >= 1.0) rx_mod_phase -= floor(rx_mod_phase);
 		if (fm_phase >= 1.0) fm_phase -= floor(fm_phase);
 		if (fm_lfo_phase >= 1.0) fm_lfo_phase -= floor(fm_lfo_phase);
+		if (voice_phase1 >= 1.0) voice_phase1 -= floor(voice_phase1);
+		if (voice_phase2 >= 1.0) voice_phase2 -= floor(voice_phase2);
+		if (voice_phase3 >= 1.0) voice_phase3 -= floor(voice_phase3);
+		if (voice_gate_phase >= 1.0) voice_gate_phase -= floor(voice_gate_phase);
 
 		double sample = 0.0;
 		if (tone1)
@@ -388,12 +409,22 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
 			noise_state = noise_state * 1664525u + 1013904223u;
 			const double noise = ((int32_t)(noise_state & 0xffff) - 32768) / 32768.0;
 			const double modulation = 0.65 + 0.35 * sin(2.0 * M_PI * rx_mod_phase);
-			sample += noise * 0.018;
-			sample += sin(2.0 * M_PI * rx_phase) * modulation * 0.026;
+			const double syllable_gate = sin(2.0 * M_PI * voice_gate_phase) > -0.25 ? 1.0 : 0.18;
+			const double voice =
+				sin(2.0 * M_PI * voice_phase1) * 0.52 +
+				sin(2.0 * M_PI * voice_phase2) * 0.31 +
+				sin(2.0 * M_PI * voice_phase3) * 0.17;
+			const double noise_level = 0.026 - signal_quality * 0.017;
+			const double voice_level = 0.010 + signal_quality * 0.040;
+			sample += noise * noise_level;
+			if (af_mode == BK4819_AF_AM)
+				sample += sin(2.0 * M_PI * rx_phase) * modulation * voice_level;
+			else
+				sample += voice * syllable_gate * modulation * voice_level;
 		}
 		if (sample > 1.0) sample = 1.0;
 		else if (sample < -1.0) sample = -1.0;
-		out[i] = (int16_t)(sample * 32767.0);
+		out[i] = (int16_t)(sample * master_gain * 32767.0);
 	}
 }
 
