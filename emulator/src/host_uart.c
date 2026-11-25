@@ -64,7 +64,12 @@ void UART_Init(void)
 		const char *slave = ptsname(fd);
 		if (slave) {
 			struct stat st;
-			if (lstat(uart_path, &st) == 0) {
+			bool path_free = lstat(uart_path, &st) != 0;
+			if (!path_free && S_ISLNK(st.st_mode) && stat(uart_path, &st) != 0) {
+				unlink(uart_path);
+				path_free = true;
+			}
+			if (!path_free) {
 				fprintf(stderr, "emulator: %s exists; using %s instead\n", uart_path, slave);
 				snprintf(uart_path, sizeof(uart_path), "%s", slave);
 			} else if (symlink(slave, uart_path) != 0) {
