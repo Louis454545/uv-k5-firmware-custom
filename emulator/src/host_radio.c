@@ -209,6 +209,14 @@ uint16_t HOST_BK4819_ReadRegister(uint8_t reg)
 	return result;
 }
 
+bool HOST_BK4819_SquelchOpen(void)
+{
+	pthread_mutex_lock(&radio_mutex);
+	bool open = squelch_open;
+	pthread_mutex_unlock(&radio_mutex);
+	return open;
+}
+
 void HOST_BK4819_WriteRegister(uint8_t reg, uint16_t value)
 {
 	pthread_mutex_lock(&radio_mutex);

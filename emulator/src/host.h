@@ -29,5 +29,6 @@ const char *HOST_UART_Path(void);
 uint16_t HOST_BK4819_ReadRegister(uint8_t reg);
 void HOST_BK4819_WriteRegister(uint8_t reg, uint16_t value);
 bool HOST_BK1080_AudioActive(void);
+bool HOST_BK4819_SquelchOpen(void);
 
 #endif

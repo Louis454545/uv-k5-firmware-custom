@@ -341,7 +341,6 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
 	int16_t *out = (int16_t *)stream;
 	int frames = len / (int)sizeof(*out);
 	const uint16_t tone_cfg = HOST_BK4819_ReadRegister(BK4819_REG_70);
-	const uint16_t interrupt_status = HOST_BK4819_ReadRegister(BK4819_REG_02);
 	const uint16_t af_config = HOST_BK4819_ReadRegister(BK4819_REG_47);
 	const uint16_t tx_mute_config = HOST_BK4819_ReadRegister(BK4819_REG_50);
 	const uint16_t audio_gain_config = HOST_BK4819_ReadRegister(BK4819_REG_48);
@@ -363,13 +362,27 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
 	const bool tone_path = audio_path && !af_muted && !tx_muted;
 	const bool tone1 = tone_path && (tone_cfg & BK4819_REG_70_MASK_ENABLE_TONE1) && f1 > 20.0;
 	const bool tone2 = tone_path && (tone_cfg & BK4819_REG_70_MASK_ENABLE_TONE2) && f2 > 20.0;
-	const bool receiver_open = audio_path && rx_audio && !af_muted && (interrupt_status & BK4819_REG_02_MASK_SQUELCH_FOUND);
+	const bool receiver_open = audio_path && rx_audio && !af_muted && HOST_BK4819_SquelchOpen();
 	const bool fm_radio_on = HOST_BK1080_AudioActive();
 	const double volume_gain = (double)((audio_gain_config >> 4) & 0x3f) / 63.0;
 	const double master_gain = 0.35 + volume_gain * 0.65;
 	const double signal_quality = rssi > 45 ? (rssi - 45) / 180.0 : 0.0;
 
+	/* The radio hardware ramps its audio path rather than switching silence
+	 * to full amplitude in one sample.  Without the same smoothing every
+	 * DualWatch audio-path toggle is a loud click in the synthesized output. */
+	static double tone1_env, tone2_env, rx_env, fm_env;
+	const double ramp = 1.0 / (AUDIO_RATE * 0.006);  /* ~6 ms attack/release */
+
 	for (int i = 0; i < frames; i++) {
+		const double tone1_target = tone1 ? g1 : 0.0;
+		const double tone2_target = tone2 ? g2 : 0.0;
+		const double rx_target = receiver_open ? 1.0 : 0.0;
+		const double fm_target = fm_radio_on ? 1.0 : 0.0;
+		tone1_env += (tone1_target - tone1_env) * ramp;
+		tone2_env += (tone2_target - tone2_env) * ramp;
+		rx_env += (rx_target - rx_env) * ramp;
+		fm_env += (fm_target - fm_env) * ramp;
 		tone_phase1 += f1 / AUDIO_RATE;
 		tone_phase2 += f2 / AUDIO_RATE;
 		rx_phase += 540.0 / AUDIO_RATE;
@@ -392,35 +405,35 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
 		if (voice_gate_phase >= 1.0) voice_gate_phase -= floor(voice_gate_phase);
 
 		double sample = 0.0;
-		if (tone1)
-			sample += sin(2.0 * M_PI * tone_phase1) * g1 * 0.30;
-		if (tone2)
-			sample += sin(2.0 * M_PI * tone_phase2) * g2 * 0.30;
-		if (fm_radio_on) {
+		if (tone1_env > 0.0005)
+			sample += sin(2.0 * M_PI * tone_phase1) * tone1_env * 0.30;
+		if (tone2_env > 0.0005)
+			sample += sin(2.0 * M_PI * tone_phase2) * tone2_env * 0.30;
+		if (fm_env > 0.0005) {
 			/* The BK1080 output is a simple virtual broadcast: a slow music-like
 			 * amplitude envelope over a carrier plus a little wideband noise. */
 			noise_state = noise_state * 1664525u + 1013904223u;
 			const double fm_noise = ((int32_t)(noise_state & 0xffff) - 32768) / 32768.0;
 			const double envelope = 0.55 + 0.45 * sin(2.0 * M_PI * fm_lfo_phase);
-			sample += sin(2.0 * M_PI * fm_phase) * envelope * 0.040;
-			sample += fm_noise * 0.008;
+			sample += sin(2.0 * M_PI * fm_phase) * envelope * 0.040 * fm_env;
+			sample += fm_noise * 0.008 * fm_env;
 		}
-		if (receiver_open) {
+		if (rx_env > 0.0005) {
 			noise_state = noise_state * 1664525u + 1013904223u;
 			const double noise = ((int32_t)(noise_state & 0xffff) - 32768) / 32768.0;
 			const double modulation = 0.65 + 0.35 * sin(2.0 * M_PI * rx_mod_phase);
-			const double syllable_gate = sin(2.0 * M_PI * voice_gate_phase) > -0.25 ? 1.0 : 0.18;
+			const double syllable_gate = 0.59 + 0.41 * sin(2.0 * M_PI * voice_gate_phase);
 			const double voice =
 				sin(2.0 * M_PI * voice_phase1) * 0.52 +
 				sin(2.0 * M_PI * voice_phase2) * 0.31 +
 				sin(2.0 * M_PI * voice_phase3) * 0.17;
 			const double noise_level = 0.026 - signal_quality * 0.017;
 			const double voice_level = 0.010 + signal_quality * 0.040;
-			sample += noise * noise_level;
+			sample += noise * noise_level * rx_env;
 			if (af_mode == BK4819_AF_AM)
-				sample += sin(2.0 * M_PI * rx_phase) * modulation * voice_level;
+				sample += sin(2.0 * M_PI * rx_phase) * modulation * voice_level * rx_env;
 			else
-				sample += voice * syllable_gate * modulation * voice_level;
+				sample += voice * syllable_gate * modulation * voice_level * rx_env;
 		}
 		if (sample > 1.0) sample = 1.0;
 		else if (sample < -1.0) sample = -1.0;
