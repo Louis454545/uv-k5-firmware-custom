@@ -496,6 +496,8 @@ clean:
 doxygen:
 	doxygen
 
+.PHONY: emulator emulator-test
+
 emulator:
 	$(MAKE) -C emulator
 
