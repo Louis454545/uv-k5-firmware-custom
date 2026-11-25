@@ -10,6 +10,7 @@ static pthread_mutex_t radio_mutex = PTHREAD_MUTEX_INITIALIZER;
 static uint16_t latched_irqs;
 static bool squelch_open;
 static bool squelch_state_valid;
+static bool irq_clear_pending;
 
 typedef struct {
 	uint32_t frequency;  /* 10 Hz units */
@@ -182,10 +183,17 @@ uint16_t HOST_BK4819_ReadRegister(uint8_t reg)
 		result = squelch_open ? 900 + (noise_random(HOST_Millis()) % 5000) : 40 + (rssi % 50);
 		break;
 	case BK4819_REG_0D:
-		result = !(regs[BK4819_REG_32] & 1u) ? 0x8000 : ((frequency >> 16) & 0x7ff);
+		result = !(regs[BK4819_REG_32] & 1u) || rssi < 60 ? 0x8000 : ((frequency >> 16) & 0x7ff);
 		break;
 	case BK4819_REG_0E:
-		result = frequency & 0xffff;
+		result = !(regs[BK4819_REG_32] & 1u) || rssi < 60 ? 0x8000 : (frequency & 0xffff);
+		break;
+	case BK4819_REG_02:
+		result = regs[reg];
+		if (irq_clear_pending) {
+			regs[BK4819_REG_02] = 0;
+			irq_clear_pending = false;
+		}
 		break;
 	case BK4819_REG_68:
 	case BK4819_REG_69:
@@ -207,8 +215,9 @@ void HOST_BK4819_WriteRegister(uint8_t reg, uint16_t value)
 	reg &= 0x7f;
 	regs[reg] = value;
 	if (reg == BK4819_REG_02 && value == 0) {
-		latched_irqs = 0;
-		regs[BK4819_REG_02] = 0;
+		/* Firmware clears the interrupt request before reading REG_02.  Keep
+		 * the status bits for that first read, then retire them. */
+		irq_clear_pending = true;
 		regs[BK4819_REG_0C] &= ~1u;
 	}
 	if (reg == BK4819_REG_38 || reg == BK4819_REG_39) {
