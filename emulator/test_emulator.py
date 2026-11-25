@@ -142,6 +142,19 @@ def main() -> int:
                 frequency = struct.unpack("<I", block[:4])[0]
                 if frequency != 14550000:
                     raise AssertionError(f"unexpected channel-0 frequency {frequency}")
+
+                write_data = bytes(range(8))
+                writemem = struct.pack("<HHHBBI", 0x051D, 16, 0x0100, 8, 0, 0x6457396A) + write_data
+                os.write(fd, command(writemem))
+                write_reply = receive_reply(fd)
+                if not write_reply.startswith(b"\x1e\x05"):
+                    raise AssertionError(f"bad EEPROM write reply: {write_reply.hex()}")
+
+                readback = b"\x1b\x05\x08\x00" + struct.pack("<HBB", 0x0100, 8, 0) + b"\x6a\x39\x57\x64"
+                os.write(fd, command(readback))
+                verify = receive_reply(fd)
+                if verify[8:16] != write_data:
+                    raise AssertionError(f"EEPROM write did not round-trip: {verify.hex()}")
             finally:
                 os.close(fd)
         finally:
@@ -152,7 +165,7 @@ def main() -> int:
                 proc.kill()
                 proc.wait()
 
-    print("emulator smoke test passed: boot LCD, memory image, UART hello, EEPROM read")
+    print("emulator smoke test passed: boot LCD, memory image, UART hello, EEPROM read/write")
     return 0
 
 

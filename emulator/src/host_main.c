@@ -324,7 +324,7 @@ static bool save_screenshot(SDL_Renderer *ren, const char *path)
 #define AUDIO_RATE 48000
 
 static SDL_AudioDeviceID audio_device;
-static double tone_phase1, tone_phase2, rx_phase, rx_mod_phase;
+static double tone_phase1, tone_phase2, rx_phase, rx_mod_phase, fm_phase, fm_lfo_phase;
 static uint32_t noise_state = 0x12345678;
 
 static double bk_tone_frequency(uint16_t encoded)
@@ -354,22 +354,36 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
 	const bool tone1 = audio_path && (tone_cfg & BK4819_REG_70_MASK_ENABLE_TONE1) && f1 > 20.0;
 	const bool tone2 = audio_path && (tone_cfg & BK4819_REG_70_MASK_ENABLE_TONE2) && f2 > 20.0;
 	const bool receiver_open = audio_path && rx_audio && (irq & (1u << BK4819_REG_3F_SHIFT_SQUELCH_FOUND));
+	const bool fm_radio_on = !GPIO_CheckBit(&GPIOB->DATA, GPIOB_PIN_BK1080);
 
 	for (int i = 0; i < frames; i++) {
 		tone_phase1 += f1 / AUDIO_RATE;
 		tone_phase2 += f2 / AUDIO_RATE;
 		rx_phase += 540.0 / AUDIO_RATE;
 		rx_mod_phase += 3.7 / AUDIO_RATE;
+		fm_phase += 660.0 / AUDIO_RATE;
+		fm_lfo_phase += 0.55 / AUDIO_RATE;
 		if (tone_phase1 >= 1.0) tone_phase1 -= floor(tone_phase1);
 		if (tone_phase2 >= 1.0) tone_phase2 -= floor(tone_phase2);
 		if (rx_phase >= 1.0) rx_phase -= floor(rx_phase);
 		if (rx_mod_phase >= 1.0) rx_mod_phase -= floor(rx_mod_phase);
+		if (fm_phase >= 1.0) fm_phase -= floor(fm_phase);
+		if (fm_lfo_phase >= 1.0) fm_lfo_phase -= floor(fm_lfo_phase);
 
 		double sample = 0.0;
 		if (tone1)
 			sample += sin(2.0 * M_PI * tone_phase1) * g1 * 0.30;
 		if (tone2)
 			sample += sin(2.0 * M_PI * tone_phase2) * g2 * 0.30;
+		if (fm_radio_on) {
+			/* The BK1080 output is a simple virtual broadcast: a slow music-like
+			 * amplitude envelope over a carrier plus a little wideband noise. */
+			noise_state = noise_state * 1664525u + 1013904223u;
+			const double fm_noise = ((int32_t)(noise_state & 0xffff) - 32768) / 32768.0;
+			const double envelope = 0.55 + 0.45 * sin(2.0 * M_PI * fm_lfo_phase);
+			sample += sin(2.0 * M_PI * fm_phase) * envelope * 0.040;
+			sample += fm_noise * 0.008;
+		}
 		if (receiver_open) {
 			noise_state = noise_state * 1664525u + 1013904223u;
 			const double noise = ((int32_t)(noise_state & 0xffff) - 32768) / 32768.0;
