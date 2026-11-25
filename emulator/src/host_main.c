@@ -362,7 +362,7 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
 	const bool tone_path = audio_path && !af_muted && !tx_muted;
 	const bool tone1 = tone_path && (tone_cfg & BK4819_REG_70_MASK_ENABLE_TONE1) && f1 > 20.0;
 	const bool tone2 = tone_path && (tone_cfg & BK4819_REG_70_MASK_ENABLE_TONE2) && f2 > 20.0;
-	const bool receiver_open = audio_path && rx_audio && !af_muted && HOST_BK4819_SquelchOpen();
+	const bool receiver_open = audio_path && rx_audio && !af_muted && af_mode != BK4819_AF_BEEP && HOST_BK4819_SquelchOpen();
 	const bool fm_radio_on = HOST_BK1080_AudioActive();
 	const double volume_gain = (double)((audio_gain_config >> 4) & 0x3f) / 63.0;
 	const double master_gain = 0.35 + volume_gain * 0.65;
