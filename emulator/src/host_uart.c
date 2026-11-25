@@ -8,6 +8,7 @@
 #include <string.h>
 #include <termios.h>
 #include <unistd.h>
+#include <sys/stat.h>
 
 #include "bsp/dp32g030/dma.h"
 #include "driver/uart.h"
@@ -62,9 +63,13 @@ void UART_Init(void)
 	if (fd >= 0 && grantpt(fd) == 0 && unlockpt(fd) == 0) {
 		const char *slave = ptsname(fd);
 		if (slave) {
-			unlink(uart_path);
-			if (symlink(slave, uart_path) != 0)
+			struct stat st;
+			if (lstat(uart_path, &st) == 0) {
+				fprintf(stderr, "emulator: %s exists; using %s instead\n", uart_path, slave);
 				snprintf(uart_path, sizeof(uart_path), "%s", slave);
+			} else if (symlink(slave, uart_path) != 0) {
+				snprintf(uart_path, sizeof(uart_path), "%s", slave);
+			}
 		}
 		uart_fd = fd;
 		uart_started = true;
