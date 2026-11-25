@@ -363,7 +363,7 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
 	const bool tone1 = tone_path && (tone_cfg & BK4819_REG_70_MASK_ENABLE_TONE1) && f1 > 20.0;
 	const bool tone2 = tone_path && (tone_cfg & BK4819_REG_70_MASK_ENABLE_TONE2) && f2 > 20.0;
 	const bool receiver_open = audio_path && rx_audio && !af_muted && af_mode != BK4819_AF_BEEP && HOST_BK4819_SquelchOpen();
-	const bool fm_radio_on = HOST_BK1080_AudioActive();
+	const bool fm_radio_on = audio_path && HOST_BK1080_AudioActive();
 	const double volume_gain = (double)((audio_gain_config >> 4) & 0x3f) / 63.0;
 	const double master_gain = 0.35 + volume_gain * 0.65;
 	const double signal_quality = rssi > 45 ? (rssi - 45) / 180.0 : 0.0;
@@ -371,8 +371,8 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
 	/* The radio hardware ramps its audio path rather than switching silence
 	 * to full amplitude in one sample.  Without the same smoothing every
 	 * DualWatch audio-path toggle is a loud click in the synthesized output. */
-	static double tone1_env, tone2_env, rx_env, fm_env;
-	const double ramp = 1.0 / (AUDIO_RATE * 0.006);  /* ~6 ms attack/release */
+	static double tone1_env, tone2_env, rx_env, fm_env, master_env;
+	const double ramp = 1.0 / (AUDIO_RATE * 0.015);  /* ~15 ms attack/release */
 
 	for (int i = 0; i < frames; i++) {
 		const double tone1_target = tone1 ? g1 : 0.0;
@@ -383,6 +383,7 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
 		tone2_env += (tone2_target - tone2_env) * ramp;
 		rx_env += (rx_target - rx_env) * ramp;
 		fm_env += (fm_target - fm_env) * ramp;
+		master_env += (master_gain - master_env) * ramp;
 		tone_phase1 += f1 / AUDIO_RATE;
 		tone_phase2 += f2 / AUDIO_RATE;
 		rx_phase += 540.0 / AUDIO_RATE;
@@ -437,7 +438,7 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
 		}
 		if (sample > 1.0) sample = 1.0;
 		else if (sample < -1.0) sample = -1.0;
-		out[i] = (int16_t)(sample * master_gain * 32767.0);
+		out[i] = (int16_t)(sample * master_env * 32767.0);
 	}
 }
 
