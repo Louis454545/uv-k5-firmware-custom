@@ -5,6 +5,7 @@
 
 static uint16_t regs[64];
 static uint16_t current_frequency;
+static bool seek_direction_down;
 static bool initialized;
 
 uint16_t BK1080_BaseFrequency;
@@ -65,7 +66,7 @@ uint16_t BK1080_ReadRegister(BK1080_Register_t Register)
 	switch (Register) {
 	case BK1080_REG_07: {
 		const unsigned jitter = strength ? HOST_Millis() % 35 : HOST_Millis() % 900;
-		const uint16_t deviation = strength ? 40 + jitter : 1600 + jitter;
+		const uint16_t deviation = strength ? (seek_direction_down ? 4085 + (jitter % 8) : 8 + (jitter % 10)) : 1600 + jitter;
 		const uint16_t snr = strength >= 55 ? 8 + (strength / 30) : strength >= 22 ? 3 : 0;
 		return (deviation << BK1080_REG_07_SHIFT_FREQD) | (snr << BK1080_REG_07_SHIFT_SNR);
 	}
@@ -96,6 +97,7 @@ bool HOST_BK1080_AudioActive(void)
 
 void BK1080_SetFrequency(uint16_t frequency, uint8_t band)
 {
+	seek_direction_down = current_frequency && frequency < current_frequency;
 	current_frequency = frequency;
 	uint16_t channel = frequency - BK1080_GetFreqLoLimit(band);
 	uint16_t regval = BK1080_ReadRegister(BK1080_REG_05_SYSTEM_CONFIGURATION2);
