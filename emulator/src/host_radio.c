@@ -1,3 +1,4 @@
+#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -5,6 +6,7 @@
 #include "host.h"
 
 static uint16_t regs[128];
+static pthread_mutex_t radio_mutex = PTHREAD_MUTEX_INITIALIZER;
 static uint16_t latched_irqs;
 static bool squelch_open;
 static bool squelch_state_valid;
@@ -97,7 +99,7 @@ static uint8_t rssi_for_frequency(uint32_t frequency)
 		if (diff > 1250)
 			level = (uint8_t)(level * 2 / 3);
 		if (diff > 3000)
-			level = (uint8_t)(level / 2);
+			level = (uint8_t)(level / 4);
 		level += noise_random(now + frequency + i) % 14;
 		if (level > rssi)
 			rssi = level;
@@ -148,39 +150,60 @@ static void update_radio_irq(uint8_t rssi)
 
 uint16_t HOST_BK4819_ReadRegister(uint8_t reg)
 {
+	pthread_mutex_lock(&radio_mutex);
 	reg &= 0x7f;
 	uint32_t frequency = current_frequency();
 	uint8_t rssi = rssi_for_frequency(frequency);
 	update_radio_irq(rssi);
+	uint16_t result;
 
 	switch (reg) {
 	case BK4819_REG_67:
-		return rssi;
-	case BK4819_REG_65:
-		return squelch_open ? 18 + (rssi % 11) : 80 + (rssi % 35);
-	case BK4819_REG_63:
-		return squelch_open ? 8 + (rssi % 9) : 65 + (rssi % 45);
-	case BK4819_REG_64:
-		return squelch_open ? 900 + (noise_random(HOST_Millis()) % 5000) : 40 + (rssi % 50);
-	case BK4819_REG_0D: {
-		if (!(regs[BK4819_REG_32] & 1u))
-			return 0x8000;
-		return (frequency >> 16) & 0x7ff;
+		result = rssi;
+		break;
+	case BK4819_REG_65: {
+		/* Ex-noise is inverse to signal quality.  It must depend on RSSI,
+		 * not on the current squelch latch: otherwise a closed squelch would
+		 * manufacture enough noise to prevent itself from ever opening. */
+		int noise = 118 - (int)(rssi * 55 / 100) + (int)(noise_random(HOST_Millis()) % 7);
+		if (noise < 4) noise = 4;
+		if (noise > 127) noise = 127;
+		result = (uint16_t)noise;
+		break;
 	}
+	case BK4819_REG_63: {
+		int glitch = 70 - (int)(rssi * 45 / 100) + (int)(noise_random(HOST_Millis() + 17) % 6);
+		if (glitch < 3) glitch = 3;
+		if (glitch > 127) glitch = 127;
+		result = (uint16_t)glitch;
+		break;
+	}
+	case BK4819_REG_64:
+		result = squelch_open ? 900 + (noise_random(HOST_Millis()) % 5000) : 40 + (rssi % 50);
+		break;
+	case BK4819_REG_0D:
+		result = !(regs[BK4819_REG_32] & 1u) ? 0x8000 : ((frequency >> 16) & 0x7ff);
+		break;
 	case BK4819_REG_0E:
-		return frequency & 0xffff;
+		result = frequency & 0xffff;
+		break;
 	case BK4819_REG_68:
 	case BK4819_REG_69:
 		/* CTCSS/CDCSS scan: no tone on the virtual noise floor.  A strong
 		 * virtual station can be extended later to return a tone here. */
-		return 0x8000;
+		result = 0x8000;
+		break;
 	default:
-		return regs[reg];
+		result = regs[reg];
+		break;
 	}
+	pthread_mutex_unlock(&radio_mutex);
+	return result;
 }
 
 void HOST_BK4819_WriteRegister(uint8_t reg, uint16_t value)
 {
+	pthread_mutex_lock(&radio_mutex);
 	reg &= 0x7f;
 	regs[reg] = value;
 	if (reg == BK4819_REG_02 && value == 0) {
@@ -191,4 +214,5 @@ void HOST_BK4819_WriteRegister(uint8_t reg, uint16_t value)
 	if (reg == BK4819_REG_38 || reg == BK4819_REG_39) {
 		squelch_state_valid = false;
 	}
+	pthread_mutex_unlock(&radio_mutex);
 }
