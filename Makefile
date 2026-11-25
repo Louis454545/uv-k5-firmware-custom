@@ -495,3 +495,11 @@ clean:
 
 doxygen:
 	doxygen
+
+.PHONY: emulator emulator-test
+
+emulator:
+	$(MAKE) -C emulator
+
+emulator-test: emulator
+	python3 emulator/test_emulator.py
