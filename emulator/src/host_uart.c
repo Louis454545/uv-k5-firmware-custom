@@ -66,8 +66,17 @@ void UART_Init(void)
 			struct stat st;
 			bool path_free = lstat(uart_path, &st) != 0;
 			if (!path_free && S_ISLNK(st.st_mode) && stat(uart_path, &st) != 0) {
-				unlink(uart_path);
-				path_free = true;
+				char target[512] = {0};
+				ssize_t n = readlink(uart_path, target, sizeof(target) - 1);
+				if (n > 0) {
+					target[n] = 0;
+					/* Only emulator-owned PTY aliases are safe to replace.  A user
+					 * symlink to a disconnected real serial device must be preserved. */
+					if (!strncmp(target, "/dev/pts/", 9)) {
+						unlink(uart_path);
+						path_free = true;
+					}
+				}
 			}
 			if (!path_free) {
 				fprintf(stderr, "emulator: %s exists; using %s instead\n", uart_path, slave);
