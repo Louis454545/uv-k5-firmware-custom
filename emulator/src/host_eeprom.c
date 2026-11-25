@@ -1,4 +1,5 @@
 #include <pthread.h>
+#include <sys/file.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -122,8 +123,10 @@ static void persist_locked(void)
 	FILE *f = fopen(eeprom_path, "r+b");
 	if (!f)
 		f = fopen(eeprom_path, "w+b");
-	if (!f)
+	if (!f) {
+		fprintf(stderr, "emulator: cannot persist EEPROM image %s\n", eeprom_path);
 		return;
+	}
 	fseek(f, 0, SEEK_SET);
 	fwrite(eeprom_data, 1, sizeof(eeprom_data), f);
 	fflush(f);
@@ -183,7 +186,20 @@ void EEPROM_WriteBuffer(uint16_t Address, const void *pBuffer)
 			changed = true;
 		}
 	}
-	if (changed)
-		persist_locked();
+	if (changed) {
+		/* Update only the eight bytes the firmware wrote.  Whole-image rewrites
+		 * would erase independent edits made by another emulator instance. */
+		FILE *f = fopen(eeprom_path, "r+b");
+		if (!f)
+			fprintf(stderr, "emulator: cannot persist EEPROM image %s\n", eeprom_path);
+		else {
+			flock(fileno(f), LOCK_EX);
+			fseek(f, Address, SEEK_SET);
+			fwrite(eeprom_data + Address, 1, 8, f);
+			fflush(f);
+			flock(fileno(f), LOCK_UN);
+			fclose(f);
+		}
+	}
 	pthread_mutex_unlock(&eeprom_mutex);
 }
