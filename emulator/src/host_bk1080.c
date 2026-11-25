@@ -1,8 +1,10 @@
 #include "bsp/dp32g030/gpio.h"
 #include "driver/bk1080.h"
 #include "driver/gpio.h"
+#include "host.h"
 
 static uint16_t regs[64];
+static uint16_t current_frequency;
 static bool initialized;
 
 uint16_t BK1080_BaseFrequency;
@@ -41,9 +43,39 @@ void BK1080_Init(uint16_t freq, uint8_t band)
 	}
 }
 
+static unsigned fm_station_strength(void)
+{
+	/* Virtual broadcast carriers in 0.1 MHz units.  Keeping these sparse lets
+	 * the firmware's own FM seek logic find real stops instead of locking on
+	 * every channel. */
+	static const uint16_t carriers[] = {885, 919, 949, 985, 1015, 1047};
+	unsigned best = 0;
+	for (unsigned i = 0; i < sizeof(carriers) / sizeof(carriers[0]); i++) {
+		uint16_t diff = current_frequency > carriers[i] ? current_frequency - carriers[i] : carriers[i] - current_frequency;
+		unsigned strength = diff == 0 ? 100 : diff == 1 ? 55 : diff == 2 ? 22 : 0;
+		if (strength > best)
+			best = strength;
+	}
+	return best;
+}
+
 uint16_t BK1080_ReadRegister(BK1080_Register_t Register)
 {
-	return regs[Register & 0x3f];
+	const unsigned strength = fm_station_strength();
+	switch (Register) {
+	case BK1080_REG_07: {
+		const unsigned jitter = strength ? HOST_Millis() % 35 : HOST_Millis() % 900;
+		const uint16_t deviation = strength ? 40 + jitter : 1600 + jitter;
+		const uint16_t snr = strength >= 55 ? 8 + (strength / 30) : strength >= 22 ? 3 : 0;
+		return (deviation << BK1080_REG_07_SHIFT_FREQD) | (snr << BK1080_REG_07_SHIFT_SNR);
+	}
+	case BK1080_REG_10: {
+		const uint16_t rssi = strength >= 55 ? 34 + strength / 3 : strength >= 22 ? 8 : 2;
+		return BK1080_REG_10_AFCRL_NOT_RAILED | rssi;
+	}
+	default:
+		return regs[Register & 0x3f];
+	}
 }
 
 void BK1080_WriteRegister(BK1080_Register_t Register, uint16_t Value)
@@ -58,6 +90,7 @@ void BK1080_Mute(bool Mute)
 
 void BK1080_SetFrequency(uint16_t frequency, uint8_t band)
 {
+	current_frequency = frequency;
 	uint16_t channel = frequency - BK1080_GetFreqLoLimit(band);
 	uint16_t regval = BK1080_ReadRegister(BK1080_REG_05_SYSTEM_CONFIGURATION2);
 	regval = (regval & ~(0x3u << 6)) | ((band & 0x3u) << 6);
